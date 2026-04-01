@@ -1,4 +1,6 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
+import { Image } from 'react-native';
 import { useState } from 'react';
 import {
   Pressable,
@@ -40,6 +42,7 @@ export function ProfileScreen() {
   const [tab, setTab] = useState<ProfileTab>('profile');
   const [twoFactor, setTwoFactor] = useState(false);
   const [showTwoFactorModal, setShowTwoFactorModal] = useState(false);
+  const [profileImageUri, setProfileImageUri] = useState<string | null>(null);
   const [smsAlerts, setSmsAlerts] = useState(true);
   const [emailSummaries, setEmailSummaries] = useState(true);
   const [autoAccept, setAutoAccept] = useState(false);
@@ -51,6 +54,24 @@ export function ProfileScreen() {
     }
 
     setTwoFactor(false);
+  };
+
+  const handlePickProfileImage = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 1,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      setProfileImageUri(result.assets[0].uri);
+    }
   };
 
   return (
@@ -78,11 +99,15 @@ export function ProfileScreen() {
           <View style={styles.profileCard}>
             <View style={styles.avatarWrap}>
               <View style={styles.avatarBox}>
-                <Text style={styles.avatarInitial}>U</Text>
+                {profileImageUri ? (
+                  <Image source={{ uri: profileImageUri }} style={styles.avatarImage} />
+                ) : (
+                  <Text style={styles.avatarInitial}>U</Text>
+                )}
               </View>
-              <View style={styles.cameraBadge}>
+              <Pressable style={styles.cameraBadge} onPress={handlePickProfileImage}>
                 <MaterialCommunityIcons name="camera-outline" size={14} color={palette.card} />
-              </View>
+              </Pressable>
             </View>
 
             <View style={styles.profileMeta}>
@@ -528,6 +553,11 @@ const styles = StyleSheet.create({
     color: palette.card,
     fontSize: 30,
     fontWeight: '900',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 16,
   },
   cameraBadge: {
     position: 'absolute',

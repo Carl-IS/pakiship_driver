@@ -40,6 +40,7 @@ export function JobDetailsScreen() {
   const job = jobs.find((item) => item.id === params.jobId);
   const [showCallModal, setShowCallModal] = useState(false);
   const [showAcceptModal, setShowAcceptModal] = useState(false);
+  const [showStatusErrorModal, setShowStatusErrorModal] = useState(false);
 
   if (!job) {
     return (
@@ -103,6 +104,10 @@ export function JobDetailsScreen() {
               navigation.goBack();
             }}
           />
+        ) : null}
+
+        {showStatusErrorModal ? (
+          <StatusErrorModal onClose={() => setShowStatusErrorModal(false)} />
         ) : null}
 
         <View style={styles.header}>
@@ -298,7 +303,10 @@ export function JobDetailsScreen() {
                 <MaterialCommunityIcons name="phone-outline" size={18} color={palette.primary} />
                 <Text style={styles.secondaryActionText}>Call Customer</Text>
               </Pressable>
-              <Pressable style={styles.primaryActionButton}>
+              <Pressable
+                style={styles.primaryActionButton}
+                onPress={() => setShowStatusErrorModal(true)}
+              >
                 <MaterialCommunityIcons name="refresh" size={18} color={palette.card} />
                 <Text style={styles.primaryActionText}>Update Parcel Status</Text>
               </Pressable>
@@ -330,7 +338,7 @@ function CallModal({
   onCallNow: () => void;
 }) {
   return (
-    <View style={styles.modalOverlay}>
+    <View style={styles.bottomModalOverlay}>
       <Pressable style={styles.modalBackdrop} onPress={onClose} />
       <View style={styles.callModalCard}>
         <View style={styles.callAvatar}>
@@ -415,6 +423,26 @@ function AcceptJobModal({
   );
 }
 
+function StatusErrorModal({ onClose }: { onClose: () => void }) {
+  return (
+    <View style={styles.modalOverlay}>
+      <Pressable style={styles.modalBackdrop} onPress={onClose} />
+      <View style={styles.errorModalCard}>
+        <View style={styles.errorIconWrap}>
+          <MaterialCommunityIcons name="alert-circle-outline" size={34} color={palette.danger} />
+        </View>
+        <Text style={styles.errorTitle}>Error 404</Text>
+        <Text style={styles.errorMessage}>
+          Parcel status details could not be found right now. Please try again later.
+        </Text>
+        <Pressable style={styles.errorButton} onPress={onClose}>
+          <Text style={styles.errorButtonText}>Close</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 function ProgressStep({
   step,
   active,
@@ -471,6 +499,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 14,
+  },
+  bottomModalOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 20,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    paddingHorizontal: 14,
+    paddingBottom: 18,
   },
   modalBackdrop: {
     ...StyleSheet.absoluteFillObject,
@@ -683,6 +719,58 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   acceptConfirmText: {
+    color: palette.card,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  errorModalCard: {
+    width: '100%',
+    maxWidth: 320,
+    borderRadius: 28,
+    backgroundColor: palette.card,
+    alignItems: 'center',
+    paddingHorizontal: 26,
+    paddingTop: 28,
+    paddingBottom: 24,
+    shadowColor: '#607875',
+    shadowOpacity: 0.28,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 8,
+  },
+  errorIconWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: '#FFF2F2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  errorTitle: {
+    color: palette.text,
+    fontSize: 20,
+    fontWeight: '900',
+    marginBottom: 10,
+  },
+  errorMessage: {
+    color: '#6C7A8D',
+    fontSize: 14,
+    fontWeight: '600',
+    lineHeight: 22,
+    textAlign: 'center',
+    marginBottom: 22,
+  },
+  errorButton: {
+    minWidth: 132,
+    height: 46,
+    borderRadius: 14,
+    backgroundColor: palette.danger,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 18,
+  },
+  errorButtonText: {
     color: palette.card,
     fontSize: 15,
     fontWeight: '800',

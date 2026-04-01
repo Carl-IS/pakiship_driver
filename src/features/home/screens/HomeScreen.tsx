@@ -1,9 +1,13 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { RefObject } from 'react';
 import {
   Image,
+  Linking,
+  Modal,
   Pressable,
   ScrollView,
   StatusBar,
@@ -26,7 +30,7 @@ type StatItem = {
 };
 
 const palette = {
-  appBg: '#EDF6F5',
+  appBg: '#FFFFFF',
   shell: '#F7FBFB',
   card: '#FFFFFF',
   cardBorder: '#D8F0EE',
@@ -41,6 +45,25 @@ const palette = {
 };
 
 const logoImage = require('../../../assets/images/logo.png');
+const tutorialHelloImage = require('../../../assets/images/Pakiship Hello.png');
+const tutorialHistoryImage = require('../../../assets/images/Pakiship History.png');
+const tutorialSendParcelImage = require('../../../assets/images/Pakiship Send Parcel.png');
+const tutorialEarningImage = require('../../../assets/images/Pakiship Earning.png');
+const tutorialTrackImage = require('../../../assets/images/Pakiship Track.png');
+const tutorialFindJobsImage = require('../../../assets/images/Pakiship History.png');
+
+type HighlightRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+type TutorialStepConfig = {
+  title: string;
+  body: string;
+  image: number;
+};
 
 const topStats: StatItem[] = [
   {
@@ -79,8 +102,19 @@ export function HomeScreen() {
   const [tab, setTab] = useState<'home' | 'jobs'>('home');
   const [jobFilter, setJobFilter] = useState<JobStatus>('available');
   const [isOnline, setIsOnline] = useState(true);
+  const [profileImageUri, setProfileImageUri] = useState<string | null>(null);
   const [showNotifications, setShowNotifications] = useState(false);
   const [hasUnreadNotifications, setHasUnreadNotifications] = useState(true);
+  const [callJob, setCallJob] = useState<DriverJob | null>(null);
+  const [showStatusErrorModal, setShowStatusErrorModal] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(true);
+  const [tutorialStep, setTutorialStep] = useState(0);
+  const previousTutorialStepRef = useRef(0);
+  const scrollViewRef = useRef<ScrollView | null>(null);
+  const onlineToggleRef = useRef<View | null>(null);
+  const activeDeliveryRef = useRef<View | null>(null);
+  const statsGridRef = useRef<View | null>(null);
+  const navJobsRef = useRef<View | null>(null);
 
   const filteredJobs = useMemo(
     () => jobs.filter((job) => job.status === jobFilter),
@@ -93,10 +127,81 @@ export function HomeScreen() {
     [],
   );
 
+  useEffect(() => {
+    if (!showTutorial) {
+      return;
+    }
+
+    setTab('home');
+  }, [showTutorial, tutorialStep]);
+
+  useEffect(() => {
+    previousTutorialStepRef.current = tutorialStep;
+  }, [tutorialStep]);
+
+  const handlePickProfileImage = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 1,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      setProfileImageUri(result.assets[0].uri);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" />
       <View style={styles.phoneShell}>
+        {showTutorial ? (
+          <WelcomeTutorial
+            step={tutorialStep}
+            targetRef={onlineToggleRef}
+            activeDeliveryRef={activeDeliveryRef}
+            statsGridRef={statsGridRef}
+            navJobsRef={navJobsRef}
+            scrollViewRef={scrollViewRef}
+            activeJob={activeJob ?? null}
+            isOnline={isOnline}
+            onPrev={() => setTutorialStep((current) => Math.max(0, current - 1))}
+            onNext={() => {
+              if (tutorialStep < 4) {
+                setTutorialStep((current) => current + 1);
+                return;
+              }
+
+              setShowTutorial(false);
+            }}
+            onClose={() => setShowTutorial(false)}
+          />
+        ) : null}
+
+        {callJob ? (
+          <CallModal
+            customerName={callJob.customer}
+            customerPhone={callJob.customerPhone}
+            onClose={() => setCallJob(null)}
+            onCallNow={async () => {
+              if (callJob.customerPhone) {
+                await Linking.openURL(`tel:${callJob.customerPhone}`);
+              }
+              setCallJob(null);
+            }}
+          />
+        ) : null}
+
+        {showStatusErrorModal ? (
+          <StatusErrorModal onClose={() => setShowStatusErrorModal(false)} />
+        ) : null}
+
         <Header
           availableJobsCount={availableJobsCount}
           showNotifications={showNotifications}
@@ -106,14 +211,37 @@ export function HomeScreen() {
             setHasUnreadNotifications(false);
           }}
           onCloseNotifications={() => setShowNotifications(false)}
+          onPressHelp={() => {
+            setTutorialStep(0);
+            setShowTutorial(true);
+          }}
           onPressProfile={() => navigation.navigate('Profile')}
         />
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          <ProfileCard isOnline={isOnline} onToggleOnline={() => setIsOnline((current) => !current)} />
+        <ScrollView
+          ref={scrollViewRef}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          <ProfileCard
+            isOnline={isOnline}
+            profileImageUri={profileImageUri}
+            onToggleOnline={() => setIsOnline((current) => !current)}
+            onPressCamera={handlePickProfileImage}
+            onlineToggleRef={onlineToggleRef}
+          />
 
           {tab === 'home' ? (
             <>
-              <View style={styles.statsGrid}>
+              {activeJob ? (
+                <View ref={activeDeliveryRef} collapsable={false}>
+                  <ActiveDeliveryCard
+                    job={activeJob}
+                    onOpenJob={() => navigation.navigate('JobDetails', { jobId: activeJob.id })}
+                  />
+                </View>
+              ) : null}
+
+              <View ref={statsGridRef} collapsable={false} style={styles.statsGrid}>
                 {topStats.map((stat) => (
                   <StatCard
                     key={stat.key}
@@ -125,13 +253,6 @@ export function HomeScreen() {
                   />
                 ))}
               </View>
-
-              {activeJob ? (
-                <ActiveDeliveryCard
-                  job={activeJob}
-                  onOpenJob={() => navigation.navigate('JobDetails', { jobId: activeJob.id })}
-                />
-              ) : null}
             </>
           ) : (
             <>
@@ -152,6 +273,8 @@ export function HomeScreen() {
                     key={job.id}
                     job={job}
                     onOpenJob={() => navigation.navigate('JobDetails', { jobId: job.id })}
+                    onCallJob={() => setCallJob(job)}
+                    onUpdateStatus={() => setShowStatusErrorModal(true)}
                   />
                 ))}
               </View>
@@ -159,9 +282,294 @@ export function HomeScreen() {
           )}
         </ScrollView>
 
-        <BottomNav current={tab} onChange={setTab} />
+        <BottomNav current={tab} onChange={setTab} navJobsRef={navJobsRef} />
       </View>
     </SafeAreaView>
+  );
+}
+
+function WelcomeTutorial({
+  step,
+  onPrev,
+  onNext,
+  onClose,
+  targetRef,
+  activeDeliveryRef,
+  statsGridRef,
+  navJobsRef,
+  scrollViewRef,
+  activeJob,
+  isOnline,
+}: {
+  step: number;
+  onPrev: () => void;
+  onNext: () => void;
+  onClose: () => void;
+  targetRef: RefObject<View | null>;
+  activeDeliveryRef: RefObject<View | null>;
+  statsGridRef: RefObject<View | null>;
+  navJobsRef: RefObject<View | null>;
+  scrollViewRef: RefObject<ScrollView | null>;
+  activeJob: DriverJob | null;
+  isOnline: boolean;
+}) {
+  const [highlightRect, setHighlightRect] = useState<HighlightRect | null>(null);
+  const previousStepRef = useRef(step);
+  const steps: TutorialStepConfig[] = [
+    {
+      title: 'Welcome to PakiSHIP!',
+      body: "Hi there! I'm your guide. Let me show you around your dashboard.",
+      image: tutorialHelloImage,
+    },
+    {
+      title: 'Go Online',
+      body: 'Toggle this to start receiving delivery requests near you.',
+      image: tutorialTrackImage,
+    },
+    {
+      title: 'Active Delivery',
+      body: 'When you have a job, navigation stays right here for quick access.',
+      image: tutorialSendParcelImage,
+    },
+    {
+      title: 'Daily Stats',
+      body: 'Keep an eye on your earnings and your performance rating!',
+      image: tutorialEarningImage,
+    },
+    {
+      title: 'Find Jobs',
+      body: "Browse available jobs in this tab whenever you're ready for more!",
+      image: tutorialFindJobsImage,
+    },
+  ] as const;
+  const currentStep = steps[step] ?? steps[0]!;
+  const isTopPosition = step >= 3;
+  const usesSpotlightCutout = step === 2 || step === 3 || step === 4;
+  const previousStep = previousStepRef.current;
+  const isReturningFromStatsToActiveDelivery = previousStep === 3 && step === 2;
+  const needsScrollBeforeMeasure = step === 2 || step === 3 || step === 4;
+
+  useEffect(() => {
+    const currentRef =
+      step === 1
+        ? targetRef
+        : step === 2
+          ? activeDeliveryRef
+          : step === 3
+            ? statsGridRef
+            : step === 4
+              ? navJobsRef
+              : null;
+
+    if (!currentRef?.current) {
+      setHighlightRect(null);
+      return;
+    }
+
+    const updateHighlight = () => {
+      currentRef.current?.measureInWindow((x, y, width, height) => {
+        setHighlightRect(
+          step === 1
+            ? { x: x - 10, y: y - 8, width: width + 20, height: height + 16 }
+            : step === 2 || step === 3 || step === 4
+              ? { x: x - 10, y: y - 8, width: width + 20, height: height + 16 }
+              : { x: x - 6, y: y - 6, width: width + 12, height: height + 12 },
+        );
+      });
+    };
+
+    if (step === 2) {
+      scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+    } else if (step === 3) {
+      scrollViewRef.current?.scrollTo({ y: 260, animated: true });
+    } else if (step === 4) {
+      scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+    }
+
+    if (!needsScrollBeforeMeasure) {
+      updateHighlight();
+    }
+
+    const timeout = setTimeout(
+      updateHighlight,
+      isReturningFromStatsToActiveDelivery ? 650 : step === 2 || step === 3 ? 450 : 300,
+    );
+
+    return () => clearTimeout(timeout);
+  }, [
+    step,
+    targetRef,
+    activeDeliveryRef,
+    statsGridRef,
+    navJobsRef,
+    scrollViewRef,
+    needsScrollBeforeMeasure,
+    isReturningFromStatsToActiveDelivery,
+  ]);
+
+  useEffect(() => {
+    previousStepRef.current = step;
+  }, [step]);
+
+  return (
+    <Modal transparent visible animationType="fade">
+      <View style={styles.tutorialOverlay}>
+        <Pressable style={styles.tutorialBackdrop} onPress={onClose} />
+
+        {!usesSpotlightCutout ? <View pointerEvents="none" style={styles.tutorialFullShade} /> : null}
+
+        {step === 1 && highlightRect ? (
+          <View
+            pointerEvents="none"
+            style={[
+              styles.tutorialOnlineHighlight,
+              {
+                left: highlightRect.x,
+                top: highlightRect.y,
+                width: highlightRect.width,
+                height: highlightRect.height,
+              },
+            ]}
+          >
+            <View
+              style={[
+                styles.tutorialOnlinePill,
+                isOnline ? styles.tutorialOnlinePillActive : styles.tutorialOnlinePillOffline,
+              ]}
+            >
+              <View
+                style={[
+                  styles.tutorialOnlineDot,
+                  isOnline ? styles.onlineDotActive : styles.onlineDotOffline,
+                ]}
+              />
+              <Text style={styles.tutorialOnlineText}>{isOnline ? 'ONLINE' : 'OFFLINE'}</Text>
+            </View>
+          </View>
+        ) : null}
+
+        {usesSpotlightCutout && highlightRect ? (
+          <>
+            <View style={[styles.tutorialShade, { left: 0, top: 0, right: 0, height: highlightRect.y }]} />
+            <View
+              style={[
+                styles.tutorialShade,
+                {
+                  left: 0,
+                  top: highlightRect.y,
+                  width: highlightRect.x,
+                  height: highlightRect.height,
+                },
+              ]}
+            />
+            <View
+              style={[
+                styles.tutorialShade,
+                {
+                  top: highlightRect.y,
+                  left: highlightRect.x + highlightRect.width,
+                  right: 0,
+                  height: highlightRect.height,
+                },
+              ]}
+            />
+            <View
+              style={[
+                styles.tutorialShade,
+                {
+                  left: 0,
+                  right: 0,
+                  top: highlightRect.y + highlightRect.height,
+                  bottom: 0,
+                },
+              ]}
+            />
+            <View
+              pointerEvents="none"
+              style={[
+                styles.tutorialNavSpotlight,
+                {
+                  left: highlightRect.x,
+                  top: highlightRect.y,
+                  width: highlightRect.width,
+                  height: highlightRect.height,
+                },
+              ]}
+            />
+          </>
+        ) : null}
+
+        <View style={[styles.tutorialWrap, isTopPosition ? styles.tutorialWrapTop : null]}>
+          <View style={[styles.tutorialMascotWrap, isTopPosition ? styles.tutorialMascotWrapTop : null]}>
+            <Image source={currentStep.image} style={styles.tutorialMascot} resizeMode="contain" />
+          </View>
+
+          <View style={[styles.tutorialCard, isTopPosition ? styles.tutorialCardTop : null]}>
+            <View style={styles.tutorialHeaderRow}>
+              <Text style={styles.tutorialStepPill}>{`Step ${step + 1}/5`}</Text>
+              <Pressable onPress={onClose} hitSlop={8}>
+                <MaterialCommunityIcons name="close" size={20} color="#C3CCD8" />
+              </Pressable>
+            </View>
+
+            <Text style={styles.tutorialTitle}>{currentStep.title}</Text>
+            <Text style={styles.tutorialBody}>{currentStep.body}</Text>
+
+            <View style={styles.tutorialActions}>
+              {step > 0 ? (
+                <Pressable onPress={onPrev} style={styles.tutorialBackButton}>
+                  <MaterialCommunityIcons name="arrow-left" size={16} color={palette.primary} />
+                  <Text style={styles.tutorialBackText}>Back</Text>
+                </Pressable>
+              ) : (
+                <View />
+              )}
+              <Pressable style={styles.tutorialNextButton} onPress={onNext}>
+                <Text style={styles.tutorialNextText}>{step === 4 ? 'Finish' : 'Next'}</Text>
+                <MaterialCommunityIcons name="arrow-right" size={16} color={palette.card} />
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function CallModal({
+  customerName,
+  customerPhone,
+  onClose,
+  onCallNow,
+}: {
+  customerName: string;
+  customerPhone?: string;
+  onClose: () => void;
+  onCallNow: () => void;
+}) {
+  return (
+    <View style={styles.callModalOverlay}>
+      <Pressable style={styles.callModalBackdrop} onPress={onClose} />
+      <View style={styles.callModalCard}>
+        <View style={styles.callAvatar}>
+          <Text style={styles.callAvatarText}>{customerName.charAt(0)}</Text>
+        </View>
+        <Text style={styles.callName}>{customerName}</Text>
+        {customerPhone ? <Text style={styles.callPhone}>{customerPhone}</Text> : null}
+        <View style={styles.callBadge}>
+          <Text style={styles.callBadgeText}>CUSTOMER</Text>
+        </View>
+        <Pressable style={styles.callPrimaryButton} onPress={onCallNow}>
+          <View style={styles.callPrimaryIconWrap}>
+            <MaterialCommunityIcons name="phone-outline" size={16} color={palette.card} />
+          </View>
+          <Text style={styles.callPrimaryText}>Call Now</Text>
+        </Pressable>
+        <Pressable onPress={onClose} style={styles.callCancelButton}>
+          <Text style={styles.callCancelText}>Cancel</Text>
+        </Pressable>
+      </View>
+    </View>
   );
 }
 
@@ -171,6 +579,7 @@ function Header({
   hasUnreadNotifications,
   onToggleNotifications,
   onCloseNotifications,
+  onPressHelp,
   onPressProfile,
 }: {
   availableJobsCount: number;
@@ -178,6 +587,7 @@ function Header({
   hasUnreadNotifications: boolean;
   onToggleNotifications: () => void;
   onCloseNotifications: () => void;
+  onPressHelp: () => void;
   onPressProfile: () => void;
 }) {
   return (
@@ -194,7 +604,7 @@ function Header({
             badge={hasUnreadNotifications}
             onPress={onToggleNotifications}
           />
-          <HeaderButton icon="help-circle-outline" />
+          <HeaderButton icon="help-circle-outline" onPress={onPressHelp} />
           <HeaderButton icon="account-outline" onPress={onPressProfile} />
           <HeaderButton icon="logout" danger />
         </View>
@@ -273,26 +683,38 @@ function NotificationMenu({
 
 function ProfileCard({
   isOnline,
+  profileImageUri,
   onToggleOnline,
+  onPressCamera,
+  onlineToggleRef,
 }: {
   isOnline: boolean;
+  profileImageUri: string | null;
   onToggleOnline: () => void;
+  onPressCamera: () => void;
+  onlineToggleRef: RefObject<View | null>;
 }) {
   return (
     <View style={styles.profileCard}>
       <View style={styles.avatarWrap}>
         <View style={styles.avatarCircle}>
-          <MaterialCommunityIcons name="account-outline" size={34} color={palette.primary} />
+          {profileImageUri ? (
+            <Image source={{ uri: profileImageUri }} style={styles.profileAvatarImage} />
+          ) : (
+            <MaterialCommunityIcons name="account-outline" size={34} color={palette.primary} />
+          )}
         </View>
-        <View style={styles.cameraBadge}>
+        <Pressable style={styles.cameraBadge} onPress={onPressCamera}>
           <MaterialCommunityIcons name="camera-outline" size={14} color={palette.card} />
-        </View>
+        </Pressable>
       </View>
 
       <View style={styles.profileContent}>
         <View style={styles.profileHeaderRow}>
           <Text style={styles.profileName}>User</Text>
           <Pressable
+            ref={onlineToggleRef}
+            collapsable={false}
             onPress={onToggleOnline}
             style={[styles.onlinePill, isOnline ? styles.onlinePillActive : styles.onlinePillOffline]}
           >
@@ -391,9 +813,13 @@ function FilterChip({
 function JobCard({
   job,
   onOpenJob,
+  onCallJob,
+  onUpdateStatus,
 }: {
   job: DriverJob;
   onOpenJob: () => void;
+  onCallJob: () => void;
+  onUpdateStatus: () => void;
 }) {
   return (
     <View style={styles.jobCard}>
@@ -453,11 +879,11 @@ function JobCard({
 
       {job.status === 'in-progress' ? (
         <View style={styles.jobActionRow}>
-          <Pressable style={styles.jobSecondaryButton}>
+          <Pressable style={styles.jobSecondaryButton} onPress={onCallJob}>
             <MaterialCommunityIcons name="phone-outline" size={18} color={palette.primary} />
             <Text style={styles.jobSecondaryButtonText}>Call</Text>
           </Pressable>
-          <Pressable style={styles.jobDarkButton}>
+          <Pressable style={styles.jobDarkButton} onPress={onUpdateStatus}>
             <MaterialCommunityIcons name="refresh" size={18} color={palette.card} />
             <Text style={styles.jobDarkButtonText}>Update Status</Text>
           </Pressable>
@@ -482,9 +908,11 @@ function JobCard({
 function BottomNav({
   current,
   onChange,
+  navJobsRef,
 }: {
   current: 'home' | 'jobs';
   onChange: (value: 'home' | 'jobs') => void;
+  navJobsRef: RefObject<View | null>;
 }) {
   return (
     <View style={styles.bottomNav}>
@@ -499,7 +927,28 @@ function BottomNav({
         label="JOBS"
         active={current === 'jobs'}
         onPress={() => onChange('jobs')}
+        itemRef={navJobsRef}
       />
+    </View>
+  );
+}
+
+function StatusErrorModal({ onClose }: { onClose: () => void }) {
+  return (
+    <View style={styles.statusErrorOverlay}>
+      <Pressable style={styles.statusErrorBackdrop} onPress={onClose} />
+      <View style={styles.statusErrorCard}>
+        <View style={styles.statusErrorIconWrap}>
+          <MaterialCommunityIcons name="alert-circle-outline" size={34} color={palette.danger} />
+        </View>
+        <Text style={styles.statusErrorTitle}>Error 404</Text>
+        <Text style={styles.statusErrorMessage}>
+          Parcel status details could not be found right now. Please try again later.
+        </Text>
+        <Pressable style={styles.statusErrorButton} onPress={onClose}>
+          <Text style={styles.statusErrorButtonText}>Close</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -509,23 +958,27 @@ function BottomNavItem({
   label,
   active,
   onPress,
+  itemRef,
 }: {
   icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
   label: string;
   active: boolean;
   onPress: () => void;
+  itemRef?: RefObject<View | null>;
 }) {
   return (
-    <Pressable onPress={onPress} style={styles.bottomNavItem}>
-      <View style={[styles.bottomNavIconWrap, active ? styles.bottomNavIconWrapActive : null]}>
-        <MaterialCommunityIcons
-          name={icon}
-          size={22}
-          color={active ? palette.primary : '#C7D0DE'}
-        />
-      </View>
-      <Text style={[styles.bottomNavLabel, active ? styles.bottomNavLabelActive : null]}>{label}</Text>
-    </Pressable>
+    <View ref={itemRef} collapsable={false}>
+      <Pressable onPress={onPress} style={styles.bottomNavItem}>
+        <View style={[styles.bottomNavIconWrap, active ? styles.bottomNavIconWrapActive : null]}>
+          <MaterialCommunityIcons
+            name={icon}
+            size={22}
+            color={active ? palette.primary : '#C7D0DE'}
+          />
+        </View>
+        <Text style={[styles.bottomNavLabel, active ? styles.bottomNavLabelActive : null]}>{label}</Text>
+      </Pressable>
+    </View>
   );
 }
 
@@ -541,6 +994,345 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: palette.appBg,
+  },
+  tutorialOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 40,
+    justifyContent: 'flex-end',
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
+  tutorialBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'transparent',
+  },
+  tutorialFullShade: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(4, 22, 20, 0.6)',
+  },
+  tutorialShade: {
+    position: 'absolute',
+    backgroundColor: 'rgba(4, 22, 20, 0.6)',
+  },
+  tutorialOnlineHighlight: {
+    position: 'absolute',
+    borderRadius: 999,
+    backgroundColor: palette.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+    shadowColor: '#FFFFFF',
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 8,
+  },
+  tutorialOnlinePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    gap: 6,
+  },
+  tutorialOnlinePillActive: {
+    borderColor: '#9DE4BF',
+    backgroundColor: '#F3FFF8',
+  },
+  tutorialOnlinePillOffline: {
+    borderColor: '#F5B5B5',
+    backgroundColor: '#FFF5F5',
+  },
+  tutorialOnlineDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 99,
+  },
+  tutorialOnlineText: {
+    color: '#091F1C',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  tutorialNavSpotlight: {
+    position: 'absolute',
+    backgroundColor: 'transparent',
+  },
+  tutorialWrap: {
+    alignSelf: 'stretch',
+  },
+  tutorialWrapTop: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 68,
+  },
+  tutorialMascotWrap: {
+    alignItems: 'center',
+    marginBottom: -24,
+    zIndex: 2,
+  },
+  tutorialMascotWrapTop: {
+    marginBottom: -18,
+  },
+  tutorialMascot: {
+    width: 96,
+    height: 96,
+  },
+  tutorialCard: {
+    backgroundColor: palette.card,
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: 'rgba(57, 181, 168, 0.2)',
+    paddingHorizontal: 20,
+    paddingTop: 36,
+    paddingBottom: 20,
+    shadowColor: '#182D2A',
+    shadowOpacity: 0.22,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 10,
+  },
+  tutorialCardTop: {
+    paddingTop: 30,
+  },
+  tutorialHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  tutorialStepPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: '#F0F9F8',
+    color: palette.primary,
+    fontSize: 9,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  tutorialTitle: {
+    color: '#041614',
+    fontSize: 18,
+    fontWeight: '900',
+    marginBottom: 6,
+  },
+  tutorialBody: {
+    color: '#6D7B8F',
+    fontSize: 13,
+    lineHeight: 21,
+    fontWeight: '600',
+    marginBottom: 18,
+  },
+  tutorialActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderTopWidth: 1,
+    borderTopColor: '#EEF2F5',
+    paddingTop: 16,
+  },
+  tutorialBackButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+  },
+  tutorialBackText: {
+    color: palette.primary,
+    fontSize: 12,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  tutorialNextButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 14,
+    backgroundColor: palette.primary,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+  },
+  tutorialNextText: {
+    color: palette.card,
+    fontSize: 11,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  statusErrorOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+  },
+  statusErrorBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(32, 51, 49, 0.45)',
+  },
+  statusErrorCard: {
+    width: '100%',
+    maxWidth: 320,
+    borderRadius: 28,
+    backgroundColor: palette.card,
+    alignItems: 'center',
+    paddingHorizontal: 26,
+    paddingTop: 28,
+    paddingBottom: 24,
+    shadowColor: '#607875',
+    shadowOpacity: 0.28,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 8,
+  },
+  statusErrorIconWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: '#FFF2F2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  statusErrorTitle: {
+    color: palette.text,
+    fontSize: 20,
+    fontWeight: '900',
+    marginBottom: 10,
+  },
+  statusErrorMessage: {
+    color: '#6C7A8D',
+    fontSize: 14,
+    fontWeight: '600',
+    lineHeight: 22,
+    textAlign: 'center',
+    marginBottom: 22,
+  },
+  statusErrorButton: {
+    minWidth: 132,
+    height: 46,
+    borderRadius: 14,
+    backgroundColor: palette.danger,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 18,
+  },
+  statusErrorButtonText: {
+    color: palette.card,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  callModalOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 30,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    paddingHorizontal: 14,
+    paddingBottom: 18,
+  },
+  callModalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(32, 51, 49, 0.45)',
+  },
+  callModalCard: {
+    width: '100%',
+    maxWidth: 320,
+    borderRadius: 28,
+    backgroundColor: palette.card,
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingTop: 26,
+    paddingBottom: 22,
+    shadowColor: '#607875',
+    shadowOpacity: 0.28,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 8,
+  },
+  callAvatar: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: palette.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    shadowColor: '#65CAC2',
+    shadowOpacity: 0.28,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 7 },
+    elevation: 4,
+  },
+  callAvatarText: {
+    color: palette.card,
+    fontSize: 32,
+    fontWeight: '900',
+  },
+  callName: {
+    color: palette.text,
+    fontSize: 16,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  callPhone: {
+    color: palette.primary,
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  callBadge: {
+    borderRadius: 999,
+    backgroundColor: '#F2F4F7',
+    paddingHorizontal: 14,
+    paddingVertical: 5,
+    marginBottom: 22,
+  },
+  callBadgeText: {
+    color: '#B0B8C6',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+  },
+  callPrimaryButton: {
+    width: '100%',
+    height: 50,
+    borderRadius: 14,
+    backgroundColor: palette.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    marginBottom: 18,
+    shadowColor: '#63C9C0',
+    shadowOpacity: 0.22,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
+  },
+  callPrimaryIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  callPrimaryText: {
+    color: palette.card,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  callCancelButton: {
+    paddingVertical: 4,
+  },
+  callCancelText: {
+    color: '#8D98A8',
+    fontSize: 14,
+    fontWeight: '700',
   },
   phoneShell: {
     flex: 1,
@@ -604,12 +1396,12 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 58,
     right: 18,
-    width: 198,
-    borderRadius: 18,
+    width: 260,
+    borderRadius: 22,
     backgroundColor: palette.card,
-    paddingHorizontal: 12,
-    paddingTop: 12,
-    paddingBottom: 10,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 14,
     shadowColor: '#7FAEAA',
     shadowOpacity: 0.24,
     shadowRadius: 18,
@@ -621,23 +1413,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 10,
+    marginBottom: 12,
   },
   notificationTitle: {
     color: palette.text,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '900',
-    letterSpacing: 0.8,
+    letterSpacing: 1,
   },
   notificationItem: {
     flexDirection: 'row',
-    gap: 10,
-    paddingVertical: 8,
+    gap: 12,
+    paddingVertical: 10,
   },
   notificationIconBubble: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 2,
@@ -653,19 +1445,19 @@ const styles = StyleSheet.create({
   },
   notificationItemTitle: {
     color: palette.text,
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: '800',
-    marginBottom: 1,
+    marginBottom: 2,
   },
   notificationItemText: {
     color: palette.subtext,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
-    marginBottom: 5,
+    marginBottom: 6,
   },
   notificationTime: {
     color: '#C7CFD9',
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '800',
   },
   profileCard: {
@@ -695,6 +1487,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#F8FFFE',
+  },
+  profileAvatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 34,
   },
   cameraBadge: {
     position: 'absolute',
