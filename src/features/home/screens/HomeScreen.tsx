@@ -344,7 +344,7 @@ function WelcomeTutorial({
   ] as const;
   const currentStep = steps[step] ?? steps[0]!;
   const isTopPosition = step >= 3;
-  const usesSpotlightCutout = step === 2 || step === 3 || step === 4;
+  const usesSpotlightCutout = step === 1 || step === 2 || step === 3 || step === 4;
   const previousStep = previousStepRef.current;
   const isReturningFromStatsToActiveDelivery = previousStep === 3 && step === 2;
   const needsScrollBeforeMeasure = step === 2 || step === 3 || step === 4;
@@ -369,11 +369,11 @@ function WelcomeTutorial({
     const updateHighlight = () => {
       currentRef.current?.measureInWindow((x, y, width, height) => {
         setHighlightRect(
-          step === 1
+          step === 1 || step === 2 || step === 3 || step === 4
             ? { x: x - 10, y: y - 8, width: width + 20, height: height + 16 }
-            : step === 2 || step === 3 || step === 4
-              ? { x: x - 10, y: y - 8, width: width + 20, height: height + 16 }
-              : { x: x - 6, y: y - 6, width: width + 12, height: height + 12 },
+            : step === 0
+            ? { x: x - 10, y: y - 8, width: width + 20, height: height + 16 }
+            : { x: x - 6, y: y - 6, width: width + 12, height: height + 12 },
         );
       });
     };
@@ -417,36 +417,6 @@ function WelcomeTutorial({
         <Pressable style={styles.tutorialBackdrop} onPress={onClose} />
 
         {!usesSpotlightCutout ? <View pointerEvents="none" style={styles.tutorialFullShade} /> : null}
-
-        {step === 1 && highlightRect ? (
-          <View
-            pointerEvents="none"
-            style={[
-              styles.tutorialOnlineHighlight,
-              {
-                left: highlightRect.x,
-                top: highlightRect.y,
-                width: highlightRect.width,
-                height: highlightRect.height,
-              },
-            ]}
-          >
-            <View
-              style={[
-                styles.tutorialOnlinePill,
-                isOnline ? styles.tutorialOnlinePillActive : styles.tutorialOnlinePillOffline,
-              ]}
-            >
-              <View
-                style={[
-                  styles.tutorialOnlineDot,
-                  isOnline ? styles.onlineDotActive : styles.onlineDotOffline,
-                ]}
-              />
-              <Text style={styles.tutorialOnlineText}>{isOnline ? 'ONLINE' : 'OFFLINE'}</Text>
-            </View>
-          </View>
-        ) : null}
 
         {usesSpotlightCutout && highlightRect ? (
           <>
@@ -1013,46 +983,6 @@ const styles = StyleSheet.create({
   tutorialShade: {
     position: 'absolute',
     backgroundColor: 'rgba(4, 22, 20, 0.6)',
-  },
-  tutorialOnlineHighlight: {
-    position: 'absolute',
-    borderRadius: 999,
-    backgroundColor: palette.card,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 8,
-    shadowColor: '#FFFFFF',
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 8,
-  },
-  tutorialOnlinePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    gap: 6,
-  },
-  tutorialOnlinePillActive: {
-    borderColor: '#9DE4BF',
-    backgroundColor: '#F3FFF8',
-  },
-  tutorialOnlinePillOffline: {
-    borderColor: '#F5B5B5',
-    backgroundColor: '#FFF5F5',
-  },
-  tutorialOnlineDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 99,
-  },
-  tutorialOnlineText: {
-    color: '#091F1C',
-    fontSize: 10,
-    fontWeight: '800',
   },
   tutorialNavSpotlight: {
     position: 'absolute',
