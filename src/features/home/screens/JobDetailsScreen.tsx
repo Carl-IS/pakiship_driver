@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { jobs } from '@features/home/data/jobs';
+import { jobs, type DeliveryType } from '@features/home/data/jobs';
 import type { RootStackParamList } from '@navigation/types';
 
 const palette = {
@@ -126,6 +126,28 @@ export function JobDetailsScreen() {
                 <View style={styles.statusPill}>
                   <Text style={styles.statusPillText}>
                     {job.status === 'in-progress' ? 'IN PROGRESS' : job.status.toUpperCase()}
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.typePill,
+                    job.deliveryType === 'direct' ? styles.typePillDirect : styles.typePillRelay,
+                  ]}
+                >
+                  <MaterialCommunityIcons
+                    name={iconForDeliveryType(job.deliveryType)}
+                    size={13}
+                    color={job.deliveryType === 'direct' ? palette.primary : '#7E8AA0'}
+                  />
+                  <Text
+                    style={[
+                      styles.typePillText,
+                      job.deliveryType === 'direct'
+                        ? styles.typePillTextDirect
+                        : styles.typePillTextRelay,
+                    ]}
+                  >
+                    {labelForDeliveryType(job.deliveryType)}
                   </Text>
                 </View>
               </View>
@@ -266,6 +288,25 @@ export function JobDetailsScreen() {
                 <Text style={styles.packageStatValue}>{job.distance}</Text>
               </View>
             </View>
+
+            <View style={styles.detailBox}>
+              <Text style={styles.detailBoxLabel}>DELIVERY TYPE</Text>
+              <Text style={styles.detailBoxValue}>{labelForDeliveryType(job.deliveryType)}</Text>
+            </View>
+
+            {job.relayPoint ? (
+              <View style={styles.detailBox}>
+                <Text style={styles.detailBoxLabel}>RELAY POINT</Text>
+                <Text style={styles.detailBoxValue}>{job.relayPoint}</Text>
+              </View>
+            ) : null}
+
+            {job.qrCode ? (
+              <View style={styles.detailBox}>
+                <Text style={styles.detailBoxLabel}>PICKUP QR</Text>
+                <Text style={[styles.detailBoxValue, styles.detailCodeValue]}>{job.qrCode}</Text>
+              </View>
+            ) : null}
 
             {job.packageDescription ? (
               <View style={styles.detailBox}>
@@ -472,6 +513,16 @@ function ProgressStep({
       <Text style={[styles.progressLabel, active ? styles.progressLabelActive : null]}>{label}</Text>
     </View>
   );
+}
+
+function labelForDeliveryType(type: DeliveryType) {
+  return type.toUpperCase();
+}
+
+function iconForDeliveryType(type: DeliveryType): React.ComponentProps<
+  typeof MaterialCommunityIcons
+>['name'] {
+  return type === 'direct' ? 'flash-outline' : 'layers-outline';
 }
 
 const styles = StyleSheet.create({
@@ -848,6 +899,31 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '900',
   },
+  typePill: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  typePillDirect: {
+    backgroundColor: '#E7F8F6',
+  },
+  typePillRelay: {
+    backgroundColor: '#F2F4F7',
+  },
+  typePillText: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.6,
+  },
+  typePillTextDirect: {
+    color: palette.primary,
+  },
+  typePillTextRelay: {
+    color: '#7E8AA0',
+  },
   earningsValue: {
     color: palette.primary,
     fontSize: 20,
@@ -1199,6 +1275,9 @@ const styles = StyleSheet.create({
     color: '#000',
     fontSize: 15,
     fontWeight: '700',
+  },
+  detailCodeValue: {
+    letterSpacing: 0.8,
   },
   instructionsBox: {
     flexDirection: 'row',

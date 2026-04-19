@@ -17,7 +17,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { jobs, type DriverJob, type JobStatus } from '@features/home/data/jobs';
+import {
+  jobs,
+  type DeliveryType,
+  type DriverJob,
+  type JobStatus,
+} from '@features/home/data/jobs';
 import type { RootStackParamList } from '@navigation/types';
 
 type StatItem = {
@@ -100,6 +105,7 @@ const topStats: StatItem[] = [
 export function HomeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList, 'Home'>>();
   const [tab, setTab] = useState<'home' | 'jobs'>('home');
+  const [deliveryTypeFilter, setDeliveryTypeFilter] = useState<DeliveryType>('direct');
   const [jobFilter, setJobFilter] = useState<JobStatus>('available');
   const [isOnline, setIsOnline] = useState(true);
   const [profileImageUri, setProfileImageUri] = useState<string | null>(null);
@@ -116,9 +122,13 @@ export function HomeScreen() {
   const statsGridRef = useRef<View | null>(null);
   const navJobsRef = useRef<View | null>(null);
 
+  const jobsForDeliveryType = useMemo(
+    () => jobs.filter((job) => job.deliveryType === deliveryTypeFilter),
+    [deliveryTypeFilter],
+  );
   const filteredJobs = useMemo(
-    () => jobs.filter((job) => job.status === jobFilter),
-    [jobFilter],
+    () => jobsForDeliveryType.filter((job) => job.status === jobFilter),
+    [jobFilter, jobsForDeliveryType],
   );
 
   const activeJob = useMemo(() => jobs.find((job) => job.status === 'in-progress'), []);
@@ -133,6 +143,7 @@ export function HomeScreen() {
     }
 
     setTab('home');
+    scrollViewRef.current?.scrollTo({ y: 0, animated: false });
   }, [showTutorial, tutorialStep]);
 
   useEffect(() => {
@@ -256,11 +267,22 @@ export function HomeScreen() {
             </>
           ) : (
             <>
+              <View style={styles.deliveryTypeControl}>
+                {(['direct', 'relay'] as DeliveryType[]).map((value) => (
+                  <DeliveryTypeChip
+                    key={value}
+                    type={value}
+                    active={deliveryTypeFilter === value}
+                    onPress={() => setDeliveryTypeFilter(value)}
+                  />
+                ))}
+              </View>
+
               <View style={styles.segmentedControl}>
                 {(['available', 'in-progress', 'completed'] as JobStatus[]).map((value) => (
                   <FilterChip
                     key={value}
-                    label={`${labelForStatus(value)} (${jobs.filter((job) => job.status === value).length})`}
+                    label={`${labelForStatus(value)} (${jobsForDeliveryType.filter((job) => job.status === value).length})`}
                     active={jobFilter === value}
                     onPress={() => setJobFilter(value)}
                   />
@@ -764,6 +786,32 @@ function ActiveDeliveryCard({
   );
 }
 
+function DeliveryTypeChip({
+  type,
+  active,
+  onPress,
+}: {
+  type: DeliveryType;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[styles.deliveryTypeChip, active ? styles.deliveryTypeChipActive : null]}
+    >
+      <MaterialCommunityIcons
+        name={iconForDeliveryType(type)}
+        size={16}
+        color={active ? palette.card : '#97A2B3'}
+      />
+      <Text style={[styles.deliveryTypeChipText, active ? styles.deliveryTypeChipTextActive : null]}>
+        {labelForDeliveryType(type)}
+      </Text>
+    </Pressable>
+  );
+}
+
 function FilterChip({
   label,
   active,
@@ -793,6 +841,13 @@ function JobCard({
 }) {
   return (
     <View style={styles.jobCard}>
+      {job.deliveryType === 'relay' ? (
+        <View style={styles.relayRequestBadge}>
+          <MaterialCommunityIcons name="layers-outline" size={11} color={palette.card} />
+          <Text style={styles.relayRequestBadgeText}>RELAY REQUEST</Text>
+        </View>
+      ) : null}
+
       <View style={styles.jobBadgeRow}>
         <View style={styles.jobTagPill}>
           <Text style={styles.jobTagPillText}>{job.tag}</Text>
@@ -813,6 +868,12 @@ function JobCard({
         <View style={styles.stopTextWrap}>
           <Text style={styles.stopLabel}>PICKUP</Text>
           <Text style={styles.stopValue}>{job.pickup}</Text>
+          {job.deliveryType === 'relay' && job.relayPoint ? (
+            <View style={styles.relayPointRow}>
+              <MaterialCommunityIcons name="map-marker-outline" size={11} color={palette.primary} />
+              <Text style={styles.relayPointText}>{job.relayPoint}</Text>
+            </View>
+          ) : null}
         </View>
       </View>
 
@@ -958,6 +1019,16 @@ function labelForStatus(status: JobStatus) {
   }
 
   return status.toUpperCase();
+}
+
+function labelForDeliveryType(type: DeliveryType) {
+  return type.toUpperCase();
+}
+
+function iconForDeliveryType(type: DeliveryType): React.ComponentProps<
+  typeof MaterialCommunityIcons
+>['name'] {
+  return type === 'direct' ? 'flash-outline' : 'layers-outline';
 }
 
 const styles = StyleSheet.create({
@@ -1642,6 +1713,47 @@ const styles = StyleSheet.create({
     padding: 5,
     gap: 6,
   },
+  deliveryTypeControl: {
+    flexDirection: 'row',
+    backgroundColor: palette.card,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#DDE9E8',
+    padding: 4,
+    gap: 6,
+    shadowColor: '#A9D8D2',
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 1,
+  },
+  deliveryTypeChip: {
+    flex: 1,
+    minHeight: 40,
+    borderRadius: 13,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 9,
+  },
+  deliveryTypeChipActive: {
+    backgroundColor: palette.primary,
+    shadowColor: '#67CAC2',
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+  deliveryTypeChipText: {
+    color: '#97A2B3',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+  },
+  deliveryTypeChipTextActive: {
+    color: palette.card,
+  },
   filterChip: {
     flex: 1,
     alignItems: 'center',
@@ -1670,6 +1782,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: palette.cardBorder,
     padding: 18,
+    position: 'relative',
+    overflow: 'hidden',
     shadowColor: '#9FD6D0',
     shadowOpacity: 0.14,
     shadowRadius: 12,
@@ -1693,6 +1807,25 @@ const styles = StyleSheet.create({
     color: palette.primary,
     fontSize: 12,
     fontWeight: '900',
+  },
+  relayRequestBadge: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    backgroundColor: '#051614',
+    borderBottomLeftRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    zIndex: 1,
+  },
+  relayRequestBadgeText: {
+    color: palette.card,
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.6,
   },
   jobSizePill: {
     backgroundColor: '#F2F4F7',
@@ -1746,6 +1879,17 @@ const styles = StyleSheet.create({
     fontSize: 26,
     fontWeight: '800',
     lineHeight: 31,
+  },
+  relayPointRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+  },
+  relayPointText: {
+    color: palette.primary,
+    fontSize: 11,
+    fontWeight: '700',
   },
   routeDivider: {
     height: 28,
